@@ -11,9 +11,10 @@ import numpy as np
 from datetime import datetime
 import time
 
-exchange = ccxt.binance({
+exchange = ccxt.binanceusdm({
     "apiKey": config.BINANCE_API_KEY,
-    "secret": config.BINANCE_SECRET_KEY
+    "secret": config.BINANCE_SECRET_KEY,
+    "dualSidePosition": true
 })
 
 def tr(data):
@@ -71,8 +72,24 @@ def check_buy_sell_signals(df):
     if not df['in_uptrend'][previous_row_index] and df['in_uptrend'][last_row_index]:
         print("changed to uptrend, buy")
         if not in_position:
-            order = exchange.create_market_buy_order('ETH/USD', 0.05)
+            pair = "ADA/USDT"
+            response = exchange.set_leverage(20, 'ADA/USDT')
+            print(response)
+            position = exchange.fetch_balance()['info']['positions']
+            pos = [p for p in position if p['symbol'] == "ETHUSDT"][0]
+            close_position = exchange.create_order(symbol=symbol, type="MARKET", side="sell", amount=pos['positionAmt'], params={"reduceOnly": True}) 
+            print(close_position)   
+            #return exchange.fetch_balance().get(settings.TRADE_FROM).get('free')
+            to_use = float(exchange.fetch_balance().get(settings.TRADE_FROM).get('free'))
+            price = float(exchange.fetchTicker(pair).get('last'))
+
+            decide_position_to_use = to_use / price
+            quantity_to_buy = decide_position_to_use*settings.TRADE_SLIP_RANGE
+
+            order = exchange.createOrder(pair, 'market', 'buy', quantity_to_buy, "positionSide": "LONG")
             print(order)
+            # order = exchange.create_market_buy_order('ETH/USD', 0.05)
+            # print(order)
             in_position = True
         else:
             print("already in position, nothing to do")
@@ -80,15 +97,31 @@ def check_buy_sell_signals(df):
     if df['in_uptrend'][previous_row_index] and not df['in_uptrend'][last_row_index]:
         if in_position:
             print("changed to downtrend, sell")
-            order = exchange.create_market_sell_order('ETH/USD', 0.05)
+            pair = "ADA/USDT"
+            response = exchange.set_leverage(20, 'ADA/USDT')
+            print(response)
+            position = exchange.fetch_balance()['info']['positions']
+            pos = [p for p in position if p['symbol'] == "ETHUSDT"][0]
+            close_position = exchange.create_order(symbol=symbol, type="MARKET", side="buy", amount=pos['positionAmt'], params={"reduceOnly": True}) 
+            print(close_position)   
+            #return exchange.fetch_balance().get(settings.TRADE_FROM).get('free')
+            to_use = float(exchange.fetch_balance().get(settings.TRADE_FROM).get('free'))
+            price = float(exchange.fetchTicker(pair).get('last'))
+
+            decide_position_to_use = to_use / price
+            quantity_to_buy = decide_position_to_use*settings.TRADE_SLIP_RANGE
+
+            order = exchange.createOrder(pair, 'market', 'sell', quantity_to_buy, "positionSide": "SHORT")
             print(order)
+            # order = exchange.create_market_sell_order('ETH/USD', 0.05)
+            # print(order)
             in_position = False
         else:
             print("You aren't in position, nothing to sell")
 
 def run_bot():
     print(f"Fetching new bars for {datetime.now().isoformat()}")
-    bars = exchange.fetch_ohlcv('ETH/USDT', timeframe='1m', limit=100)
+    bars = exchange.fetch_ohlcv('ADA/USDT', timeframe='1m', limit=100)
     df = pd.DataFrame(bars[:-1], columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
     df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
 
